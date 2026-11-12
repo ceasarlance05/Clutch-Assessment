@@ -29,6 +29,7 @@ const Phone = (props) => <Icon name="Phone" {...props} />;
 const Building = (props) => <Icon name="Building" {...props} />;
 const Compass = (props) => <Icon name="Compass" {...props} />;
 const Filter = (props) => <Icon name="Filter" {...props} />;
+const Bell = (props) => <Icon name="Bell" {...props} />;
 
 // Your live Google Apps Script Web App Endpoint
 const LIVE_API_URL =
@@ -126,6 +127,10 @@ export default function App() {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [syncStatus, setSyncStatus] = useState('Connecting...');
   const [lastSynced, setLastSynced] = useState(new Date().toLocaleTimeString());
+  
+  // Notification States
+  const [isNotifying, setIsNotifying] = useState(false);
+  const [notifyMessage, setNotifyMessage] = useState('');
 
   // Filtering & Modals
   const [searchQuery, setSearchQuery] = useState('');
@@ -160,6 +165,28 @@ export default function App() {
     }
   };
 
+  // Trigger webhook notification via Apps Script doPost
+  const handleTriggerNotify = async () => {
+    setIsNotifying(true);
+    setNotifyMessage('Sending alert...');
+    try {
+      await fetch(LIVE_API_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: JSON.stringify({ action: 'sendNotification' })
+      });
+      
+      setNotifyMessage('Alert sent successfully!');
+      setTimeout(() => setNotifyMessage(''), 4000);
+    } catch (error) {
+      console.error('Failed to trigger notification:', error);
+      setNotifyMessage('Failed to send');
+      setTimeout(() => setNotifyMessage(''), 4000);
+    } finally {
+      setIsNotifying(false);
+    }
+  };
+
   useEffect(() => {
     fetchLiveDriveData();
 
@@ -173,7 +200,6 @@ export default function App() {
     const today = new Date('2026-11-12'); // Current assessment reference date
 
     return events.map((ev) => {
-      // Match CSV registrations by event_id prefix (e.g., "E101 Sydney Cloud...")
       const evRegs = registrations.filter((r) => {
         const eventField = (r.event || '').trim();
         return (
@@ -201,7 +227,6 @@ export default function App() {
       const eventDate = new Date(ev.date);
       const daysUntil = Math.ceil((eventDate - today) / (1000 * 60 * 60 * 24));
 
-      // Determine health / attention status
       let health = 'ON_TRACK';
       let attentionReason = '';
 
@@ -354,6 +379,19 @@ export default function App() {
                 <RefreshCw className={`h-3.5 w-3.5 ${isRefreshing ? 'animate-spin text-indigo-500' : ''}`} />
               </button>
             </div>
+
+            <button
+              onClick={handleTriggerNotify}
+              disabled={isNotifying}
+              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border transition ${
+                darkMode
+                  ? 'bg-indigo-950/60 border-indigo-800 text-indigo-300 hover:bg-indigo-900/80'
+                  : 'bg-indigo-50 border-indigo-200 text-indigo-700 hover:bg-indigo-100'
+              }`}
+            >
+              <Bell className={`h-3.5 w-3.5 ${isNotifying ? 'animate-bounce' : ''}`} />
+              {notifyMessage || 'Notify Slack'}
+            </button>
 
             <button
               onClick={() => setActiveModal('architecture')}
@@ -876,7 +914,7 @@ export default function App() {
                 </p>
                 <p>
                   <strong className="text-indigo-500">3. Unified Data Reconciliation:</strong>{' '}
-                  Granular CSV records override last night’s baseline counts for active registration
+                  Granular CSV records override baseline counts for active registration
                   exports (E101, E114, E125), while remaining events display baseline totals from{' '}
                   <code>events.json</code>.
                 </p>
@@ -886,7 +924,7 @@ export default function App() {
                 <p>
                   <strong className="text-amber-500">Data Hygiene Flags Surfaced:</strong> Several CSV
                   records contain missing emails, obfuscated <code>[at]</code> addresses, leading/trailing
-                  whitespace in names, or duplicate registration rows (e.g., R1010 and R1210). These are
+                  whitespace in names, or duplicate registration rows. These are
                   preserved and highlighted in the inspection drawer for ops cleanup.
                 </p>
                 <p>
